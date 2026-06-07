@@ -3,6 +3,13 @@ import uuid
 from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+import logging
+
+# Configure logging for PM2
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
+)
+logger = logging.getLogger(__name__)
 
 from agent import EssayAgent
 
@@ -34,6 +41,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await update.message.reply_text("Maaf bro, gw cuma nerima file PDF untuk panduan lomba.")
         return
         
+    logger.info(f"Received PDF document: {document.file_name}")
     await update.message.reply_text("PDF diterima! Sedang mendownload dan membaca panduan...")
     
     # Check file size (Telegram limits bot downloads to 20MB)
@@ -52,6 +60,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     
     # Get user prompt from caption
     user_prompt = update.message.caption if update.message.caption else "Buatkan essay berdasarkan panduan di PDF ini."
+    logger.info(f"User prompt: {user_prompt}")
     
     await update.message.reply_text("Panduan sedang dianalisis. AI sedang meriset dan menulis essay. Proses ini mungkin memakan waktu beberapa menit. Tunggu ya...")
     
@@ -61,7 +70,9 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     
     # Process Essay
     try:
+        logger.info(f"Starting essay generation for document {document.file_id}")
         result_msg = agent.process_essay_request(user_prompt, pdf_path, output_path)
+        logger.info(f"Essay generation completed: {result_msg}")
         
         # Send back the DOCX
         if os.path.exists(output_path):
