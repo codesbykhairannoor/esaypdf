@@ -9,6 +9,8 @@ import logging
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
+# Sembunyikan log 'ping' getUpdates dari Telegram biar layar gak penuh
+logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 from agent import EssayAgent
