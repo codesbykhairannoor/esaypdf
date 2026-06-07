@@ -36,10 +36,19 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         
     await update.message.reply_text("PDF diterima! Sedang mendownload dan membaca panduan...")
     
-    # Download file
-    file = await context.bot.get_file(document.file_id)
-    pdf_path = os.path.join("data", f"{document.file_id}.pdf")
-    await file.download_to_drive(pdf_path)
+    # Check file size (Telegram limits bot downloads to 20MB)
+    if document.file_size and document.file_size > 20 * 1024 * 1024:
+        await update.message.reply_text("Waduh bro, ukuran file PDF lu kegedean (Maksimal 20MB dari sananya Telegram). Coba kompres dulu PDF-nya di ilovepdf.com atau sejenisnya, terus kirim ulang ke sini!")
+        return
+        
+    try:
+        # Download file
+        file = await context.bot.get_file(document.file_id)
+        pdf_path = os.path.join("data", f"{document.file_id}.pdf")
+        await file.download_to_drive(pdf_path)
+    except Exception as e:
+        await update.message.reply_text(f"Gagal download PDF: {e}")
+        return
     
     # Get user prompt from caption
     user_prompt = update.message.caption if update.message.caption else "Buatkan essay berdasarkan panduan di PDF ini."
