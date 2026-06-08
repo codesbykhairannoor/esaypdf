@@ -49,15 +49,20 @@ class EssayAgent:
             2. Isi (Gagasan Utama)
             3. Penutup
             
-            Also, provide exactly 3 specific Google search queries needed to find real statistics or facts for this essay.
-            Format your response strictly as:
-            CHOSEN THEME: [Your chosen theme]
+            Buatlah sebuah kerangka karangan (Outline) Essay yang mendalam.
+            Kemudian, tentukan 3 Kueri Pencarian (Search Queries) spesifik berbahasa Indonesia atau Inggris untuk mencari literatur atau jurnal akademis yang relevan. 
+            
+            PENTING: Kueri pencarian HARUS ditujukan untuk mencari jurnal akademik, PDF riset, atau tulisan ilmiah. Tambahkan kata kunci seperti "jurnal PDF", "Google Scholar", "studi kasus PDF", atau "research paper" di dalam kueri lu.
+            
+            Berikan output dalam format persis seperti ini:
+            CHOSEN THEME: [Tema spesifik yang lu pilih]
             OUTLINE:
-            [Your outline here]
+            (Tulis kerangka bab per bab di sini)
+            
             QUERIES:
-            1. [Query 1]
-            2. [Query 2]
-            3. [Query 3]
+            - [Kueri 1]
+            - [Kueri 2]
+            - [Kueri 3]
             """
         )
         strategy = (strategy_prompt | self.llm).invoke({"user_prompt": user_prompt, "guidelines": guidelines}).content

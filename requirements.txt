@@ -7,3 +7,5 @@ chromadb
 duckduckgo-search
 python-dotenv
 langchain-openai
+beautifulsoup4
+requests
