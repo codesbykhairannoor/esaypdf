@@ -13,11 +13,11 @@ logger = logging.getLogger(__name__)
 
 class EssayAgent:
     def __init__(self):
-        api_key = os.getenv("DEEPSEEK_API_KEY")
+        api_key = os.getenv("ALIBABA_API_KEY")
         self.llm = ChatOpenAI(
-             model="deepseek-chat",
+             model="qwen-plus",
              api_key=api_key,
-             base_url="https://api.deepseek.com/v1",
+             base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
              max_tokens=3000, 
              temperature=0.7
         )
