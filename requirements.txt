@@ -4,8 +4,5 @@ langchain-google-genai
 python-docx
 PyMuPDF
 chromadb
-duckduckgo-search
 python-dotenv
 langchain-openai
-beautifulsoup4
-requests

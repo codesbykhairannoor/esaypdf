@@ -1,10 +1,10 @@
 import os
 import logging
+import re
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import PromptTemplate
 from memory.rag_manager import RAGManager
-from tools.web_search import search_web
 from tools.pdf_reader import extract_text_from_pdf
 from tools.docx_writer import create_docx
 
@@ -19,149 +19,115 @@ class EssayAgent:
              api_key=api_key,
              base_url="https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
              max_tokens=3000, 
-             temperature=0.7
+             temperature=0.7,
+             model_kwargs={"extra_body": {"enable_search": True}}
         )
         self.memory = RAGManager()
         
     def process_essay_request(self, user_prompt: str, pdf_path: str, output_path: str) -> str:
-        """Deep research multi-stage pipeline with Judge Mode and Autonomy."""
+        """Deep research multi-stage pipeline with Judge Mode, Autonomy, and Qwen Optimizations."""
         logger.info("STAGE 1: Reading Guidelines & Memory")
-        guidelines = "No PDF provided."
+        guidelines_text = "No PDF provided."
         if pdf_path and os.path.exists(pdf_path):
-            guidelines = extract_text_from_pdf(pdf_path)[:15000]
+            guidelines_text = extract_text_from_pdf(pdf_path)[:15000]
             
         past_learnings = self.memory.get_relevant_memory("Essay writing guidelines and rules")
         logger.info(f"Loaded past learnings: {past_learnings}")
 
-        # STAGE 2: Outline, Theme Autonomy & Research Queries
-        logger.info("STAGE 2: Generating Outline and Search Queries")
-        strategy_prompt = PromptTemplate(
-            input_variables=["user_prompt", "guidelines"],
-            template="""You are an expert academic strategist and essay competition winner.
-            USER REQUEST: {user_prompt}
-            GUIDELINES: {guidelines}
+        # STAGE 2: Strategy & Outline Planning
+        logger.info(f"Stage 2: Formulating strategy and outline.")
+        strategy_prompt = PromptTemplate.from_template(
+            """{guidelines}
             
-            CRITICAL INSTRUCTION FOR THEME SELECTION:
-            If the USER REQUEST does not specify a specific theme or subtheme, you MUST read the GUIDELINES, extract all available themes, and autonomously choose the ONE subtheme that is the most unique, innovative, and likely to win. State your chosen theme explicitly.
+            Berdasarkan Panduan Lomba di atas, bertindaklah sebagai Profesor Akademik jenius dari Ivy League.
+            Tugas pertama Anda adalah menganalisis panduan dan memilih satu tema spesifik yang paling unik dan berpotensi menang.
+            Gunakan framework MECE (Mutually Exclusive, Collectively Exhaustive) untuk membuat kerangka essay (Outline) yang komprehensif tanpa ada argumen yang tumpang tindih.
             
-            Based on the request (or your autonomous theme choice) and guidelines, generate a detailed 3-part outline for the essay:
-            1. Pendahuluan
-            2. Isi (Gagasan Utama)
-            3. Penutup
-            
-            Buatlah sebuah kerangka karangan (Outline) Essay yang mendalam.
-            Kemudian, tentukan 3 Kueri Pencarian (Search Queries) spesifik berbahasa Indonesia atau Inggris untuk mencari literatur atau jurnal akademis yang relevan. 
-            
-            PENTING: Kueri pencarian HARUS ditujukan untuk mencari jurnal akademik, PDF riset, atau tulisan ilmiah. Tambahkan kata kunci seperti "jurnal PDF", "Google Scholar", "studi kasus PDF", atau "research paper" di dalam kueri lu.
+            Instruksi Pengguna tambahan: {user_prompt}
             
             Berikan output dalam format persis seperti ini:
             CHOSEN THEME: [Tema spesifik yang lu pilih]
             OUTLINE:
-            (Tulis kerangka bab per bab di sini)
-            
-            QUERIES:
-            - [Kueri 1]
-            - [Kueri 2]
-            - [Kueri 3]
+            (Tulis kerangka bab per bab dengan gaya MECE)
             """
         )
-        strategy = (strategy_prompt | self.llm).invoke({"user_prompt": user_prompt, "guidelines": guidelines}).content
+        strategy = (strategy_prompt | self.llm).invoke({"user_prompt": user_prompt, "guidelines": guidelines_text}).content
         logger.info(f"Strategy Output:\n{strategy}")
 
-        # Extract Queries
-        queries = []
-        if "QUERIES:" in strategy:
-            q_text = strategy.split("QUERIES:")[1].strip().split('\n')
-            for line in q_text:
-                if len(line) > 3 and line[0].isdigit():
-                    queries.append(line.split('.', 1)[1].strip())
+        # Extract chosen theme
+        theme_match = re.search(r"CHOSEN THEME:(.*?)\n", strategy, re.IGNORECASE)
+        chosen_theme = theme_match.group(1).strip() if theme_match else "Tema Umum"
         
-        # STAGE 3: Web Research
-        logger.info(f"STAGE 3: Executing Web Research for queries: {queries}")
-        research_data = ""
-        for q in queries[:3]:
-            logger.info(f"Searching: {q}")
-            res = search_web(q)
-            research_data += f"\nSearch '{q}':\n{res}\n"
+        # Extract outline
+        outline_match = re.search(r"OUTLINE:(.*)", strategy, re.DOTALL | re.IGNORECASE)
+        outline = outline_match.group(1).strip() if outline_match else strategy
+
+        # STAGE 3 & 4: Drafting via Qwen Native Search
+        logger.info(f"Stage 3 & 4: Drafting Content natively via Qwen Search")
+        draft_prompt = PromptTemplate.from_template(
+            """{guidelines}
             
-        # STAGE 4: Drafting
-        logger.info("STAGE 4: Drafting the Initial Essay")
-        draft_prompt = PromptTemplate(
-            input_variables=["user_prompt", "guidelines", "past_learnings", "strategy", "research_data"],
-            template="""You are an elite essay writer. Write the FIRST DRAFT of a highly academic essay.
+            Berdasarkan Panduan Lomba di atas, buatlah Draft Lengkap Essay akademis tingkat tinggi.
             
-            USER REQUEST: {user_prompt}
-            GUIDELINES: {guidelines}
-            PAST CRITIQUES TO AVOID: {past_learnings}
+            Tema Terpilih: {chosen_theme}
+            Kerangka Essay (MECE): 
+            {outline}
             
-            APPROVED STRATEGY & OUTLINE:
-            {strategy}
-            
-            RESEARCH DATA:
-            {research_data}
-            
-            INSTRUCTIONS:
-            - Write the complete essay draft.
-            - Use proper Markdown styling: # for Main Title, ## for Sections, ** for bold.
-            - Integrate the research data naturally.
-            - DO NOT output anything except the essay content.
+            Karena kamu memiliki akses internet terintegrasi, carilah fakta, statistik, dan penelitian terbaru secara otomatis untuk mendukung argumen ini.
+            Gunakan gaya bahasa akademik, formal, objektif, dan logis. Hindari kata klise. Gunakan transisi kalimat yang canggih.
+            Gunakan aturan sitasi Harvard jika mengambil data.
+            Tulis draft essay secara utuh mulai dari Judul, Pendahuluan, Isi, hingga Kesimpulan.
             """
         )
-        
         draft_content = (draft_prompt | self.llm).invoke({
-            "user_prompt": user_prompt,
-            "guidelines": guidelines,
-            "past_learnings": past_learnings,
-            "strategy": strategy.split("QUERIES:")[0],
-            "research_data": research_data
+            "guidelines": guidelines_text,
+            "chosen_theme": chosen_theme,
+            "outline": outline
         }).content
         logger.info("Initial Draft Completed.")
 
         # STAGE 5: Judge Mode (Self-Evaluation)
-        logger.info("STAGE 5: Judge Mode (Self-Evaluation)")
-        judge_prompt = PromptTemplate(
-            input_variables=["guidelines", "draft_content"],
-            template="""You are a strict, world-class competition judge. 
-            Review the following essay draft against the competition guidelines.
+        logger.info(f"Stage 5: Judge Mode")
+        judge_prompt = PromptTemplate.from_template(
+            """{guidelines}
             
-            GUIDELINES & RUBRIC:
-            {guidelines}
+            Anda adalah Dewan Juri killer untuk lomba esai di atas. Evaluasi draft esai berikut ini dengan standar sangat tinggi.
             
-            ESSAY DRAFT:
-            {draft_content}
+            DRAFT ESSAY:
+            {draft}
             
-            INSTRUCTIONS:
-            Identify flaws, weak arguments, formatting violations, or lack of data in the draft.
-            Provide a brutally honest critique and specific instructions on how to improve it.
+            Berikan kritik pedas mengenai koherensi MECE, tata bahasa, kekuatan argumen, dan orisinalitas ide. Apa yang kurang?
             """
         )
-        critique = (judge_prompt | self.llm).invoke({
-            "guidelines": guidelines,
-            "draft_content": draft_content
-        }).content
+        critique = (judge_prompt | self.llm).invoke({"guidelines": guidelines_text, "draft": draft_content}).content
         logger.info(f"Judge Critique:\n{critique}")
 
         # STAGE 6: Final Revision
-        logger.info("STAGE 6: Final Revision")
-        revision_prompt = PromptTemplate(
-            input_variables=["draft_content", "critique"],
-            template="""You are the elite essay writer. You have received a harsh critique from the judge.
+        logger.info(f"Stage 6: Revision")
+        revision_prompt = PromptTemplate.from_template(
+            """{guidelines}
             
-            INITIAL DRAFT:
-            {draft_content}
+            Anda adalah Penulis Ahli. Revisi draft essay berikut berdasarkan kritik dari Juri.
+            Pastikan output akhir ini sudah mematuhi kaidah bahasa baku, terstruktur dengan metode MECE, dan mengandung argumen yang sangat meyakinkan.
+            Format teks hasil menggunakan format Markdown standar (Gunakan ** untuk tebal, * untuk miring).
             
-            JUDGE's CRITIQUE:
+            DRAFT LAMA:
+            {draft}
+            
+            KRITIK JURI:
             {critique}
             
-            INSTRUCTIONS:
-            Rewrite and polish the entire essay to perfectly address the judge's critique.
-            Maintain excellent academic formatting (Markdown headers, bolding).
-            DO NOT output anything except the final revised essay content.
+            MEMORI KRITIK MASA LALU (Terapkan jika relevan):
+            {past_memories}
+            
+            Hasilkan Essay Final (tanpa catatan tambahan).
             """
         )
         final_essay = (revision_prompt | self.llm).invoke({
-            "draft_content": draft_content,
-            "critique": critique
+            "guidelines": guidelines_text,
+            "draft": draft_content,
+            "critique": critique,
+            "past_memories": past_learnings
         }).content
 
         # STAGE 7: Saving to DOCX
