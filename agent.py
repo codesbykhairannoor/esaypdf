@@ -17,7 +17,7 @@ class EssayAgent:
         self.llm = ChatOpenAI(
              model="qwen-plus",
              api_key=api_key,
-             base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+             base_url="https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
              max_tokens=3000, 
              temperature=0.7
         )
