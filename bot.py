@@ -18,6 +18,16 @@ from agent import EssayAgent
 # Load environment variables
 load_dotenv()
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+ALLOWED_USERNAMES = os.getenv("ALLOWED_USERNAMES", "").split(",")
+
+def is_allowed_user(update: Update) -> bool:
+    """Checks if the user is in the allowed list."""
+    if not ALLOWED_USERNAMES or ALLOWED_USERNAMES == [""]:
+        return True # If not configured, allow all (fallback)
+    username = update.effective_user.username
+    if not username:
+        return False
+    return username in ALLOWED_USERNAMES
 
 # Initialize Agent
 agent = EssayAgent()
@@ -27,6 +37,10 @@ os.makedirs("data", exist_ok=True)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send a message when the command /start is issued."""
+    if not is_allowed_user(update):
+        await update.message.reply_text("Maaf, bot ini bersifat private dan hanya bisa diakses oleh majikannya.")
+        return
+
     welcome_msg = (
         "Halo bos! Gw AI Agent penulis essay lu.\n"
         "Kirim file PDF panduan lomba ke sini, tambahkan caption/pesan "
@@ -37,6 +51,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handles incoming PDF files."""
+    if not is_allowed_user(update):
+        await update.message.reply_text("Maaf, bot ini bersifat private dan hanya bisa diakses oleh majikannya.")
+        return
+
     document = update.message.document
     
     if not document.file_name.lower().endswith('.pdf'):
@@ -90,6 +108,10 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 async def handle_critique(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handles learning critiques from user."""
+    if not is_allowed_user(update):
+        await update.message.reply_text("Maaf, bot ini bersifat private.")
+        return
+
     if not context.args:
         await update.message.reply_text("Cara pakai: /critique [kritik lu]. Contoh: /critique Selalu gunakan bahasa baku.")
         return
