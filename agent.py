@@ -14,14 +14,29 @@ logger = logging.getLogger(__name__)
 class EssayAgent:
     def __init__(self):
         api_key = os.getenv("ALIBABA_API_KEY")
-        self.llm = ChatOpenAI(
-             model="qwen-plus",
-             api_key=api_key,
-             base_url="https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
-             max_tokens=3000, 
-             temperature=0.7,
-             model_kwargs={"extra_body": {"enable_search": True}}
-        )
+        models_to_try = [
+            "deepseek-v3.2",
+            "qwen3.6-max-preview",
+            "qwen3.6-plus",
+            "qwen3-max",
+            "qwen3.5-397b-a17b",
+            "qwen3.6-flash",
+            "qwen3.5-122b-a10b"
+        ]
+        
+        llms = []
+        for model_name in models_to_try:
+            llms.append(ChatOpenAI(
+                model=model_name,
+                api_key=api_key,
+                base_url="https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+                temperature=0.7,
+                max_retries=1,
+                timeout=60,
+                extra_body={"enable_search": True}
+            ))
+            
+        self.llm = llms[0].with_fallbacks(fallbacks=llms[1:])
         self.memory = RAGManager()
         
     def process_essay_request(self, user_prompt: str, pdf_path: str, output_path: str) -> str:
