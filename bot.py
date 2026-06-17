@@ -1,5 +1,6 @@
 import os
 import uuid
+import asyncio
 from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
@@ -91,15 +92,19 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     # Process Essay
     try:
         logger.info(f"Starting essay generation for document {document.file_id}")
-        result_msg = agent.process_essay_request(user_prompt, pdf_path, output_path)
+        # Run blocking essay generation in a background thread to keep event loop responsive
+        result_msg = await asyncio.to_thread(
+            agent.process_essay_request, user_prompt, pdf_path, output_path
+        )
         logger.info(f"Essay generation completed: {result_msg}")
         
         # Send back the DOCX
         if os.path.exists(output_path):
-            await update.message.reply_document(
-                document=open(output_path, 'rb'),
-                caption="Ini hasil essay lu bro. Kalau ada yang kurang pas, kritik aja pakai command /critique [pesan]."
-            )
+            with open(output_path, 'rb') as doc_file:
+                await update.message.reply_document(
+                    document=doc_file,
+                    caption="Ini hasil essay lu bro. Kalau ada yang kurang pas, kritik aja pakai command /critique [pesan]."
+                )
         else:
             await update.message.reply_text("Gagal membuat file DOCX.")
             
