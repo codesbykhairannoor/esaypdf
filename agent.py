@@ -97,104 +97,95 @@ class EssayAgent:
         academic_refs = fetch_academic_papers(chosen_theme, max_results=3)
         logger.info(f"Academic References Found:\n{academic_refs}")
 
-        # STAGE 3 & 4: Drafting via Qwen Native Search
-        logger.info(f"Stage 3 & 4: Drafting Content natively via Qwen Search")
-        draft_prompt = PromptTemplate.from_template(
+        # STAGE 3: Iterative Chunking (Joki AI v7.0)
+        logger.info(f"Stage 3: Iterative Drafting via Chunking")
+        
+        sections = [
+            "Bagian 1: Pendahuluan dan Fakta Observasi/Tragedi Lapangan",
+            "Bagian 2: Analisis Akar Masalah (Root-Cause)",
+            "Bagian 3: Desain Solusi & Sistem Teknis",
+            "Bagian 4: Hambatan Lapangan (Gesekan Implementasi) & Kesimpulan"
+        ]
+        
+        chunk_draft_prompt = PromptTemplate.from_template(
             """{guidelines}
             
-            Berdasarkan Panduan Lomba di atas, buatlah Draft Lengkap Essay akademis tingkat tinggi dengan bobot materi yang sangat mendalam, tajam, dan panjang (Target: minimal 2000-2500 kata).
+            Anda sedang menulis sebuah esai panjang berkaliber tinggi (Target total 2000 kata).
+            Tema: {chosen_theme}
+            Kerangka Keseluruhan: {outline}
+            Referensi Akademik: {academic_references}
             
-            Tema Terpilih: {chosen_theme}
-            Kerangka Essay: 
-            {outline}
+            TEKS YANG SUDAH DITULIS SEBELUMNYA (Lanjutkan dari sini):
+            {previous_text}
             
-            {academic_references}
+            TUGAS ANDA SAAT INI:
+            Tulislah SECARA EKSKLUSIF untuk **{current_section}**.
+            Targetkan bagian ini minimal 400-500 kata yang padat, kritis, dan mendalam.
             
-            Aturan Penulisan Draf:
-            1. **Gunakan Struktur Investigatif**: Wajib menggunakan alur: (1) Kasus Kegagalan/Tragedi Spesifik di Lapangan -> (2) Analisis Akar Masalah -> (3) Desain Sistem Teknis -> (4) Gesekan Implementasi Lokal.
-            2. **Hapus Label Framework Eksplisit**: JANGAN memunculkan nama framework (*MECE*, *Triple Helix*, dll.).
-            3. **Gaya Pembuka Anti-Robot**: DILARANG KERAS menggunakan kata klise AI (*paradoks*, *dilema*, *status quo*, *di satu sisi/pihak...*). MULAI setiap bab dengan fakta lapangan yang keras atau kutipan wawancara.
-            4. **Skala Teknis Realistis**: Hindari klaim bombastis. Gunakan metode riset yang masuk akal dan riil seperti observasi digital manual atau kuesioner acak.
-            5. **Operasionalisasi Ide Mendalam**: Pertebal pembahasan dengan menjelaskan secara konkret: ilustrasi nyata, skema alur sistem, parameter etika teknis, atau rancangan alur sistem. Jangan gunakan kalimat bertele-tele.
-            6. **Kevalidan Data**: Gunakan Kominfo, MAFINDO, atau TurnBackHoax. JANGAN mengarang angka persentase fiktif.
-            7. **Gaya Bahasa yang Bold**: Tulis dengan "jiwa" dan karakter penulis yang kuat, tajam, persuasif. Hindari bahasa laporan asisten AI.
-            8. **Solusi Realistis & Analisis Hambatan**: Uraikan secara jujur tantangan nyata di lapangan beserta rencana mitigasi taktis yang konkret.
-            9. **Spesifikasi SLM+RAG & Guardrails**: Usulkan Small Language Model (SLM) + RAG serta detail fungsi Safety Guardrails.
-            10. **Aspek Teologi Wasilah**: Bahas batas teologis AI sebagai Wasilah.
-            11. **Tabel Pendukung**: Wajib membuat minimal dua tabel markdown terstruktur.
-            12. **Sitasi Jurnal Asli**: Anda WAJIB mengutip data, argumen, atau temuan dari "REFERENSI JURNAL AKADEMIK" yang disediakan di atas ke dalam esai, dan cantumkan sebagai daftar pustaka.
-            
-            Gunakan gaya bahasa akademik formal namun berkarakter kuat, dan gunakan aturan sitasi Harvard jika merujuk data. Tulis esai secara utuh mulai dari Judul sampai Kesimpulan.
+            ATURAN:
+            1. Jangan mengulang pendahuluan jika ini bukan Bagian 1.
+            2. Wajib mengutip referensi akademik di atas secara natural.
+            3. DILARANG menggunakan kata-kata klise (paradoks, di satu sisi, status quo).
+            4. Jangan membuat tabel di bagian ini, cukup fokus pada narasi paragraf.
+            5. Lanjutkan alur cerita/argumen dengan mulus dari teks sebelumnya tanpa basa-basi pengantar yang mengulangi judul.
             """
         )
-        draft_content = (draft_prompt | self.llm).invoke({
-            "guidelines": guidelines_text,
-            "chosen_theme": chosen_theme,
-            "outline": outline,
-            "academic_references": academic_refs
-        }).content
-        logger.info("Initial Draft Completed.")
-
-        # STAGE 5: Judge Mode (Self-Evaluation)
-        logger.info(f"Stage 5: Judge Mode")
-        judge_prompt = PromptTemplate.from_template(
-            """{guidelines}
+        
+        chunks = []
+        previous_text = "(Belum ada teks, ini bagian pertama)"
+        
+        for section in sections:
+            logger.info(f"Drafting {section}...")
+            chunk_content = (chunk_draft_prompt | self.llm).invoke({
+                "guidelines": guidelines_text,
+                "chosen_theme": chosen_theme,
+                "outline": outline,
+                "academic_references": academic_refs,
+                "previous_text": previous_text[-3000:], # Keep only last 3000 chars as context to prevent token overflow
+                "current_section": section
+            }).content
+            chunks.append(chunk_content)
+            previous_text = "\n\n".join(chunks)
             
-            Anda adalah Dewan Juri killer untuk lomba esai di atas. Evaluasi draft esai berikut ini dengan standar sangat tinggi.
+        full_draft = "\n\n".join(chunks)
+        
+        # STAGE 3.5: Dedicated Attachment Generation
+        logger.info(f"Stage 3.5: Generating Attachments/Tables")
+        attachment_prompt = PromptTemplate.from_template(
+            """Berdasarkan draf esai berikut ini, buatkan LAMPIRAN berupa DUA BUAH TABEL MARKDOWN TERSTRUKTUR.
+            Tabel 1: Perbandingan Konseptual
+            Tabel 2: Roadmap Implementasi & Analisis Hambatan
             
-            DRAFT ESSAY:
-            {draft}
+            DRAF ESAI (Hanya sebagai konteks, tidak perlu ditulis ulang):
+            {full_draft}
             
-            Berikan kritik pedas mengenai koherensi MECE, tata bahasa, kekuatan argumen, dan orisinalitas ide. Apa yang kurang?
+            ATURAN:
+            - Hanya keluarkan format Markdown Tabel (dimulai dengan |).
+            - Jangan tambahkan teks basa-basi lain di atas atau di bawah tabel.
             """
         )
-        critique = (judge_prompt | self.llm).invoke({"guidelines": guidelines_text, "draft": draft_content}).content
-        logger.info(f"Judge Critique:\n{critique}")
-
-        # STAGE 6: Final Revision
-        logger.info(f"Stage 6: Revision")
-        revision_prompt = PromptTemplate.from_template(
-            """{guidelines}
+        tables_content = (attachment_prompt | self.llm).invoke({"full_draft": full_draft[-4000:]}).content
+        
+        # Combine everything
+        final_essay = full_draft + "\n\n## Lampiran\n\n" + tables_content
+        
+        # Post-Processing Anti-Template Filter
+        logger.info("Applying Post-Processing Filter...")
+        cliches = [
+            (r"(?i)di satu (sisi|pihak)", "pada satu aspek"),
+            (r"(?i)di (sisi|pihak) lain", "sementara itu"),
+            (r"(?i)paradoks( kontemporer)?( yang tak terhindarkan)?", "tantangan nyata di lapangan"),
+            (r"(?i)status quo", "kondisi saat ini"),
+            (r"(?i)dilema", "persoalan mendasar"),
+            (r"(?i)mutually exclusive(,)? (and )?collectively exhaustive", ""),
+            (r"(?i)\(MECE\)", ""),
+            (r"(?i)triple helix", "kolaborasi lintas pihak")
+        ]
+        for pattern, replacement in cliches:
+            final_essay = re.sub(pattern, replacement, final_essay)
             
-            Anda adalah Penulis Ahli dengan gaya bahasa yang tajam, berani, dan berkarakter kuat. Revisi draft essay berikut berdasarkan kritik dari Juri.
-            Pastikan output akhir ini mematuhi kaidah bahasa baku, terstruktur, dan mengandung argumen yang sangat meyakinkan serta tajam (Target panjang: 2000-2500 kata).
-            
-            Aturan Mutlak Revisi (Anti-AI Flaws):
-            1. **Hancurkan Struktur Template AI**: Jika draft masih memakai kerangka 3 dimensi (Sosial/Ekonomi/Teknologi) atau Roadmap 3 Fase, ROMBAK TOTAL menjadi narasi berbasis Kasus Lapangan -> Desain Teknis -> Gesekan Implementasi.
-            2. **Hapus Jargon Eksplisit**: JANGAN PERNAH menuliskan kata-kata seperti *MECE*, *Triple Helix*, dll.
-            3. **Hancurkan Gaya Bahasa AI (Anti-Template)**: Bantai dan ganti semua kata klise (*paradoks*, *dilema*, *status quo*, *di satu sisi/pihak... di sisi/pihak lain*, *implikasi struktural dari...*). Ganti dengan narasi observasi riil lapangan.
-            3. **Skala Teknis Realistis**: Pastikan metode penelitian yang disebut masuk akal (JANGAN sebut penggunaan *Meta API* atau *TikTok API*; ganti dengan observasi digital manual atau kuesioner acak).
-            4. **Operasionalisasi Konkret (Anti-Fluff)**: Jangan memperpanjang teks dengan kalimat bertele-tele atau pengulangan ide. Perluas bab dengan merinci skema alur sistem, ilustrasi nyata, detail etika parameter teknis, dan mitigasi risiko.
-            5. **Fakta & Lembaga Siber**: Koreksi semua halusinasi data (JANGAN hubungkan BNPB dengan isu hoaks siber keagamaan; ganti dengan MAFINDO, Kominfo, atau TurnBackHoax). Pastikan nama universitas dan kota penyelenggara (Pusdima Unmul, Universitas Mulawarman, Samarinda) tertulis 100% presisi.
-            6. **Suara Penulis yang Bold**: Pertahankan nada tulisan yang berani mengambil posisi kritis atas isu keagamaan dan AI, bukan hambar atau netral.
-            7. **Solusi Realistis & Mitigasi Risiko**: Pastikan esai tidak terdengar utopis. Harus ada penjelasan hambatan lapangan (birokrasi, dana, resistensi kultural) dan mitigasi konkretnya.
-            8. **Spesifikasi SLM+RAG & Guardrails**: Tegaskan keunggulan Small Language Model (SLM) + RAG, dan jelaskan detail fungsi Safety Guardrails demi mitigasi risiko hukum (sistem pemutus otomatis yang mengalihkan user ke ahli/konselor manusia).
-            9. **Teologi Wasilah**: Tegaskan peran AI sebagai Wasilah yang tetap membutuhkan bimbingan spiritual manusia (Sanad, Ta'dzim, Qalb).
-            10. **Tabel Wajib**: Wajib sertakan minimal dua tabel markdown. JANGAN hapus format tabel markdown (`|---|`), pastikan tabel tetap utuh karena akan dikonversi menjadi tabel Word asli.
-            
-            Format teks hasil menggunakan format Markdown standar (Gunakan ** untuk tebal, * untuk miring).
-            
-            DRAFT LAMA:
-            {draft}
-            
-            KRITIK JURI:
-            {critique}
-            
-            MEMORI KRITIK MASA LALU (Terapkan jika relevan):
-            {past_memories}
-            
-            Hasilkan Essay Final (tanpa catatan tambahan, langsung dari Judul sampai selesai).
-            """
-        )
-        final_essay = (revision_prompt | self.llm).invoke({
-            "guidelines": guidelines_text,
-            "draft": draft_content,
-            "critique": critique,
-            "past_memories": past_learnings
-        }).content
-
-        # STAGE 7: Saving to DOCX
-        logger.info("STAGE 7: Saving to DOCX")
+        # STAGE 4: Saving to DOCX
+        logger.info("STAGE 4: Saving to DOCX")
         result_msg = create_docx(final_essay, output_path)
         logger.info(f"Finished: {result_msg}")
         return f"Essay generated successfully.\nDetails: {result_msg}"
